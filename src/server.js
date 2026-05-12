@@ -26,5 +26,5 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`PathVision OS Backend Server running on port ${PORT}`);
-  console.log(`API Base URL: http://localhost:${PORT}/api`);
+  console.log(`API Production URL: https://pathvision-backend.onrender.com/api`);
 });

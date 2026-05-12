@@ -19,8 +19,8 @@ app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// API Version 1
-app.use('/api/v1', routes);
+// API Base Route
+app.use('/api', routes);
 
 // Base Health Check
 app.get('/', (req, res) => {

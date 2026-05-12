@@ -1,65 +1,114 @@
-const db = require('../config/db');
-const bcrypt = require('bcryptjs');
+const { supabase } = require('../config/supabase');
 const jwt = require('jsonwebtoken');
 
 exports.register = async (req, res, next) => {
-  try {
-    const { email, password, full_name, role } = req.body;
+  const { email, password, full_name, role } = req.body;
+  console.log(`[AUTH] Signup attempt for email: ${email}`);
 
-    // Check if user exists
-    const userCheck = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ message: 'User already exists' });
+  try {
+    // 1. Supabase Auth Signup
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (authError) {
+      console.error(`[AUTH] Supabase Signup Error: ${authError.message}`);
+      return res.status(authError.status || 400).json({ 
+        message: 'Supabase Auth Failure', 
+        error: authError.message 
+      });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    console.log(`[AUTH] Supabase User Created: ${authData.user.id}`);
 
-    // Create user
-    const newUser = await db.query(
-      'INSERT INTO users (email, password_hash, full_name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, full_name, role',
-      [email, passwordHash, full_name, role || 'user']
-    );
+    // 2. Profile Creation in Supabase 'profiles' table
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: authData.user.id,
+        full_name: full_name,
+        role: role || 'user',
+        email: email
+      });
 
-    res.status(201).json(newUser.rows[0]);
+    if (profileError) {
+      console.error(`[AUTH] Profile Creation Error: ${profileError.message}`);
+      // Note: User is created in Auth but profile failed. 
+      // We might want to return success but warn, or fail here.
+    } else {
+      console.log(`[AUTH] Profile Record Created for: ${authData.user.id}`);
+    }
+
+    res.status(201).json({
+      message: 'Signup successful',
+      user: {
+        id: authData.user.id,
+        email: authData.user.email,
+        full_name: full_name,
+        role: role || 'user'
+      }
+    });
   } catch (error) {
+    console.error(`[AUTH] Critical Signup Exception: ${error.message}`);
     next(error);
   }
 };
 
 exports.login = async (req, res, next) => {
+  const { email, password } = req.body;
+  console.log(`[AUTH] Login attempt for email: ${email}`);
+
   try {
-    const { email, password } = req.body;
+    // 1. Supabase Auth Login
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    const user = userResult.rows[0];
-
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+    if (authError) {
+      console.error(`[AUTH] Supabase Login Error: ${authError.message}`);
+      return res.status(authError.status || 401).json({ 
+        message: 'Invalid credentials or Auth failure', 
+        error: authError.message 
+      });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+    console.log(`[AUTH] Supabase Session established for: ${authData.user.id}`);
+
+    // 2. Fetch Profile Data
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single();
+
+    if (profileError) {
+      console.warn(`[AUTH] Profile Fetch Error: ${profileError.message}`);
     }
 
+    // 3. Generate internal JWT if needed (though Supabase provides its own, 
+    // the app seems to expect a specific structure)
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: authData.user.id, role: profile?.role || 'user' },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
+    console.log(`[AUTH] Login successful for: ${email}`);
+
     res.json({
       token,
+      supabaseToken: authData.session.access_token,
       user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        role: user.role
+        id: authData.user.id,
+        email: authData.user.email,
+        full_name: profile?.full_name || 'User',
+        role: profile?.role || 'user'
       }
     });
   } catch (error) {
+    console.error(`[AUTH] Critical Login Exception: ${error.message}`);
     next(error);
   }
 };
