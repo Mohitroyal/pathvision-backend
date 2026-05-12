@@ -1,6 +1,6 @@
 const db = require('../config/db');
-const EventService = require('./event.service');
 const Groq = require('groq-sdk');
+const JarvisActions = require('./jarvis.action.service');
 
 // Ensure API key is present
 if (!process.env.GROQ_API_KEY) {
@@ -12,11 +12,31 @@ const groq = new Groq({
 });
 
 class AiService {
-  async processCommand(text) {
+  async processCommand(text, userId) {
     const command = text.toLowerCase();
-    console.log(`[AI SERVICE] Incoming Command: "${text}"`);
+    console.log(`[AI SERVICE] Incoming Command: "${text}" | User: ${userId || 'anonymous'}`);
+    const intent = JarvisActions.detectIntent(text);
+    console.log(`[AI SERVICE] Detected Intent: ${intent}`);
     
     try {
+      // ─── INTENT-BASED ACTION EXECUTION ───────────────────────────────
+      if (intent === 'CREATE_REMINDER') {
+        return await JarvisActions.createReminder(text, userId);
+      }
+      if (intent === 'CREATE_TASK') {
+        return await JarvisActions.createTask(text, userId);
+      }
+      if (intent === 'CREATE_GOAL') {
+        return await JarvisActions.createGoal(text, userId);
+      }
+      if (intent === 'CREATE_PLANNER_BLOCK') {
+        return await JarvisActions.createPlannerBlock(text, userId);
+      }
+      if (intent === 'CREATE_BRAIN_DUMP') {
+        return await JarvisActions.createBrainDump(text, userId);
+      }
+      // ─────────────────────────────────────────────────────────────────
+
       // --- 1. SYSTEM ACTIONS (INTERNAL LOGIC) ---
 
       // Generate weekly summary
