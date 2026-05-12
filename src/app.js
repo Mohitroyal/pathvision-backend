@@ -8,15 +8,30 @@ const errorHandler = require('./middleware/error.middleware');
 
 const app = express();
 
-// Production Security & Middleware
-app.use(helmet());
-app.use(cors({
-  origin: config.corsOrigin,
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+
+    const allowed = config.corsOrigin;
+    // Also allow any *.vercel.app and localhost dynamically
+    const isVercel = origin.endsWith('.vercel.app');
+    const isLocalhost = origin.startsWith('http://localhost');
+
+    if (allowed.includes(origin) || isVercel || isLocalhost) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Blocked origin: ${origin}`);
+      callback(new Error(`CORS blocked: ${origin}`));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-}));
-app.options(/.*/, cors());
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

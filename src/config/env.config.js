@@ -15,6 +15,7 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key',
   groqApiKey: process.env.GROQ_API_KEY,
   corsOrigin: [
+    'https://pathvision-frontend-las7.vercel.app',
     'https://pathvision-ias7.vercel.app',
     'https://pathvision-frontend-6jv4.vercel.app',
     'http://localhost:3000',
